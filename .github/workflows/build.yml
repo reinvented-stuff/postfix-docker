@@ -93,7 +93,7 @@ jobs:
           IMAGE_TAG="reinventedstuff/${{ env.APP_NAME }}:${{ env.PLANNED_VERSION }}-${{ env.ARCH }}"
           docker build --platform "${{ env.PLATFORM }}" -t "${IMAGE_TAG}" .
 
-          echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login docker.io "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+          echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login docker.io -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
           docker push "${IMAGE_TAG}"
 
 
