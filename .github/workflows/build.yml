@@ -62,7 +62,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: linux-ubuntu-22.04
+    runs-on: ubuntu-22.04
 
     needs:
       - validate_new_version
