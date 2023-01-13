@@ -1,0 +1,153 @@
+---
+# yamllint disable rule:line-length
+# yamllint disable rule:truthy
+
+name: Build
+
+on:
+  push:
+    branches:
+      - 'build_*'
+      - '!master'
+
+jobs:
+
+  notify_started:
+    name: Send notification on start
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Send notification on start
+        uses: rest-gateway/notification-action@1.0.9
+        with:
+          message: |
+            <b>Workflow:</b> <code>${GITHUB_WORKFLOW}</code>
+            <b>Repository:</b> ${GITHUB_REPOSITORY} (${GITHUB_REF#refs/heads/})
+            <b>URL:</b> <code>https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}</code>
+          recipient: "${{ secrets.NOTIFICATIONS_DEFAULT_RECIPIENT }}"
+          rest_gateway_url: "${{ secrets.REST_GATEWAY_API_URL }}"
+          rest_gateway_token: "${{ secrets.REST_GATEWAY_TOKEN }}"
+          rest_gateway_bot_name: "${{ secrets.REST_GATEWAY_BOT_NAME }}"
+
+
+  validate_new_version:
+    name: Validate new version
+    runs-on: ubuntu-latest
+    outputs:
+      planned_version: ${{ steps.validate_new_version.outputs.planned_version }}
+      planned_version_commit: ${{ steps.get_version_commit.outputs.version_commit }}
+      version_file_exists: ${{ steps.validate_new_version.outputs.version_file_exists }}
+      tag_hash: ${{ steps.validate_new_version.outputs.tag_hash }}
+      can_create: ${{ steps.validate_new_version.outputs.can_create }}
+      tag_exists: ${{ steps.validate_new_version.outputs.tag_exists }}
+      branch_name: ${{ steps.validate_new_version.outputs.branch_name }}
+
+    steps:
+
+      - name: Check out this repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+
+      - name: Use latest released action
+        id: validate_new_version
+        uses: reinvented-stuff/validate-version-action@master
+        with:
+          version_filename: ".version"
+          github_token: "${{ secrets.GITHUB_TOKEN }}"
+          fail_on_error: false
+
+
+  build:
+    name: Build
+    runs-on: linux-ubuntu-22.04
+
+    needs:
+      - validate_new_version
+
+    outputs:
+      job_status: ${{ job.status }}
+
+    env:
+      PLANNED_VERSION: ${{ needs.validate_new_version.outputs.planned_version }}
+      CAN_CREATE_RELEASE: ${{ needs.validate_new_version.outputs.can_create }}
+      BRANCH_NAME: ${{ needs.validate_new_version.outputs.branch_name }}
+      PLATFORM: "linux/amd64"
+      ARCH: "amd64"
+      APP_NAME: "postfix-docker"
+
+    steps:
+
+      - name: Check out this repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+
+      - name: Build Docker image
+        id: build_docker_image
+        shell: bash
+        run: |
+          IMAGE_TAG="reinventedstuff/${{ env.APP_NAME }}:${{ env.PLANNED_VERSION }}-${{ env.PLATFORM }}"
+          docker build --platform "${{ env.PLATFORM }}" -t "${IMAGE_TAG}" .
+
+          echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login docker.io "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+          docker push "${IMAGE_TAG}"
+
+
+      - name: Send notification on build completion
+        uses: rest-gateway/notification-action@1.0.9
+        if: always()
+        with:
+          message: |
+            <b>Workflow:</b>   ${GITHUB_WORKFLOW}
+            <b>Repository:</b> ${GITHUB_REPOSITORY}
+
+            <b>Matrix:</b>
+            Version: ${{ matrix.version }}
+            Ref: ${{ env.PLANNED_VERSION_COMMIT }}
+            Label: ${{ matrix.runs-on.label }}
+            Arch: ${{ matrix.runs-on.arch }}
+
+            <b>Outcome:</b> 
+            build_docker_image: ${{ steps.build_docker_image.outcome }}
+
+            <b>Run:</b> <code>https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}</code>
+            <b>Image:</b> <code>${{ steps.build_docker_image.outputs.image_full_name }}</code>
+
+          recipient: "${{ secrets.NOTIFICATIONS_DEFAULT_RECIPIENT }}"
+          rest_gateway_url: "${{ secrets.REST_GATEWAY_API_URL }}"
+          rest_gateway_token: "${{ secrets.REST_GATEWAY_TOKEN }}"
+          rest_gateway_bot_name: "${{ secrets.REST_GATEWAY_BOT_NAME }}"
+
+
+  after_build:
+    name: After build process
+    runs-on: ubuntu-latest
+
+    if: always()
+
+    needs:
+      - build
+
+    steps:
+
+      - name: Send notification on all builds finish
+        uses: rest-gateway/notification-action@1.0.9
+        with:
+          message: |
+            <b>Workflow:</b>   ${GITHUB_WORKFLOW}
+            <b>Repository:</b> ${GITHUB_REPOSITORY}
+
+            <b>Matrix results:</b>
+            Status: ${{ needs.build.outputs.job_status }}
+
+          recipient: "${{ secrets.NOTIFICATIONS_DEFAULT_RECIPIENT }}"
+          rest_gateway_url: "${{ secrets.REST_GATEWAY_API_URL }}"
+          rest_gateway_token: "${{ secrets.REST_GATEWAY_TOKEN }}"
+          rest_gateway_bot_name: "${{ secrets.REST_GATEWAY_BOT_NAME }}"
+
+
+...

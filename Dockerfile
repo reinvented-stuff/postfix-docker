@@ -7,7 +7,7 @@ ARG POSTFIX_LISTEN_PORT=2500
 LABEL org.opencontainers.image.title="postfix-docker"
 LABEL org.opencontainers.image.description="Postfix in a Docker container."
 LABEL org.opencontainers.image.authors="Pavel Kim <hello@pavelkim.com>"
-LABEL org.opencontainers.image.url="https://github.com/??/??"
+LABEL org.opencontainers.image.url="https://github.com/reinvented-stuff/postfix-docker"
 LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 RUN apk update && \
