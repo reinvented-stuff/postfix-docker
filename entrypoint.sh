@@ -1,39 +1,22 @@
 #!/bin/sh
 #
-# Entrypoint script
+# Start Postfix in the foreground, as the container's process 1.
 #
+# Run as process 1, "postfix start-fg" execs master(8) in init mode (-i), so
+# the signal "docker stop" sends, SIGTERM, reaches master itself, as the one
+# "postfix stop" sends does: master passes it on to its child processes and
+# exits (master(8), SIGTERM). Logging to standard output, with
+# "maillog_file = /dev/stdout", needs start-fg too (postconf(5), maillog_file).
+#
+set -eu
 
-POSTFIX_CONF_DIR="/etc/postfix"
+config_directory=/etc/postfix
 
-trap_SIGINT() {
-    echo
-    echo "Caught SIGINT"
-    echo
+for config_file in main.cf master.cf; do
+    if [ ! -f "${config_directory}/${config_file}" ]; then
+        echo "postfix-docker: ${config_directory}/${config_file} not found" >&2
+        exit 1
+    fi
+done
 
-    postfix stop
-    echo "Postfix stopped."
-}
-
-trap "trap_SIGINT" 2
-
-if ! [ -f "${POSTFIX_CONF_DIR}/main.cf" ] && ! [ -f "${POSTFIX_CONF_DIR}/master.cf" ]; then
-
-    echo "Configuration files not found in the '${POSTFIX_CONF_DIR}'"
-    echo "Provisioning default configuration awkwardly by reinstalling the postfix package."
-
-    apk fix postfix
-
-else
-
-    echo "Found both main.cf and master.cf."
-    echo "Considering configuration under the user's control."
-
-fi
-
-
-echo "Starting postfix..."
-postfix -v start-fg &
-
-wait
-exit $?
-
+exec postfix start-fg
